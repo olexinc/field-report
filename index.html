@@ -237,6 +237,12 @@ input[type=checkbox]{width:22px;height:22px;min-height:0;accent-color:var(--acce
 .meter{height:8px;border-radius:99px;background:var(--surface-2);border:1px solid var(--line-2);overflow:hidden;margin-top:6px}
 .meter i{display:block;height:100%;background:var(--accent)}
 
+.rcard{display:grid;grid-template-columns:72px 1fr;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:10px}
+.rcard h3{font-size:18px;overflow-wrap:anywhere}
+.rcard .m{font-size:14px;color:var(--muted)}
+.rcard .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.rbadge{width:72px;height:72px;border-radius:8px;display:grid;place-items:center;font:700 15px var(--mono);letter-spacing:.04em;background:var(--navy);color:var(--gold);border:1px solid var(--line)}
+.rbadge.xlsx{background:#1d6f42;color:#ffffff}
 .crow{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line-2)}
 .clist .crow:first-child{border-top:0;padding-top:0}
 .clist .crow:last-child{padding-bottom:0}
@@ -358,10 +364,13 @@ const ICON={
 };
 
 /* ---------- storage (IndexedDB on this device) ---------- */
-let DB=null, MEM={insp:new Map(),media:new Map(),meta:new Map()};
-function idbOpen(){return new Promise((res,rej)=>{let r;try{r=indexedDB.open("sdusd-field-report",1)}catch(e){return rej(e)}
- r.onupgradeneeded=()=>{const d=r.result;if(!d.objectStoreNames.contains("insp"))d.createObjectStore("insp",{keyPath:"id"});if(!d.objectStoreNames.contains("media"))d.createObjectStore("media",{keyPath:"id"});if(!d.objectStoreNames.contains("meta"))d.createObjectStore("meta")};
- r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);r.onblocked=()=>rej(new Error("blocked"))})}
+let DB=null, MEM={insp:new Map(),media:new Map(),meta:new Map(),reports:new Map()}, REPS=[];
+function idbOpen(){return new Promise((res,rej)=>{let r;try{r=indexedDB.open("sdusd-field-report",2)}catch(e){return rej(e)}
+ r.onupgradeneeded=()=>{const d=r.result;if(!d.objectStoreNames.contains("insp"))d.createObjectStore("insp",{keyPath:"id"});if(!d.objectStoreNames.contains("media"))d.createObjectStore("media",{keyPath:"id"});if(!d.objectStoreNames.contains("meta"))d.createObjectStore("meta");if(!d.objectStoreNames.contains("reports"))d.createObjectStore("reports",{keyPath:"id"})};
+ r.onsuccess=()=>{const d=r.result;d.onversionchange=()=>{d.close();toast("Field Report was updated. Close and reopen it to keep saving.",12000)};res(d)};
+ r.onerror=()=>rej(r.error);
+ // An older copy of the app still open elsewhere holds the database; wait for it rather than running unsaved.
+ r.onblocked=()=>{try{$("stat").innerHTML="Finishing update<br>Close other Field Report windows"}catch(e){}}})}
 const rq=r=>new Promise((res,rej)=>{r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});
 const txDone=t=>new Promise((res,rej)=>{t.oncomplete=()=>res();t.onerror=t.onabort=()=>rej(t.error||new Error("aborted"))});
 async function dbPut(store,val,key){if(!DB){MEM[store].set(key??val.id,val);return}const t=DB.transaction(store,"readwrite");key===undefined?t.objectStore(store).put(val):t.objectStore(store).put(val,key);await txDone(t)}
@@ -370,7 +379,7 @@ async function dbDel(store,key){if(!DB){MEM[store].delete(key);return}const t=DB
 async function dbAll(store){if(!DB)return[...MEM[store].values()];return rq(DB.transaction(store).objectStore(store).getAll())}
 
 /* ---------- state ---------- */
-const S={insps:[],cur:null,view:"insp",filter:"all",hdrOpen:true,settings:{org:"San Diego Unified School District",dept:"Physical Plant Operations",inspector:"",company:"",gps:true},lastBackup:null,q:"",qType:""};
+const S={insps:[],cur:null,view:"insp",filter:"all",hdrOpen:true,settings:{org:"San Diego Unified School District",dept:"Physical Plant Operations",inspector:"",company:"",gps:true},lastBackup:null,q:"",qType:"",hTab:"insp"};
 let editing=null;          // item id in sheet
 let pending=null;          // {mode:'new'|'add', itemId, type}
 const urlCache=new Map();  // media id -> {url, poster}
@@ -736,7 +745,7 @@ function searchText(I){const i=I.info;return[i.site,i.project,i.projectNo,i.area
 function hitLine(I,q){if(!q)return"";for(const x of I.items){for(const v of[x.notes,x.location,x.ref,x.action,x.followup]){const s=String(v||""),k=s.toLowerCase().indexOf(q);if(k>=0){const a=Math.max(0,k-30),seg=s.slice(a,k+q.length+40);
  return`<div class="hit">#${pad3(x.seq)}: ${a?"…":""}${esc(seg).replace(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"),"ig"),m=>`<mark>${m}</mark>`)}…</div>`}}}return""}
 function histList(){const q=S.q.trim().toLowerCase();
- const L=S.insps.filter(I=>(I.items.length||I.id===S.cur)&&(!S.qType||I.info.type===S.qType)&&(!q||searchText(I).includes(q))).sort((a,b)=>(b.info.date||"").localeCompare(a.info.date||"")||(b.created||"").localeCompare(a.created||""));
+ const L=listedInsps().filter(I=>(!S.qType||I.info.type===S.qType)&&(!q||searchText(I).includes(q))).sort((a,b)=>(b.info.date||"").localeCompare(a.info.date||"")||(b.created||"").localeCompare(a.created||""));
  if(!L.length)return`<div class="empty">${S.q||S.qType?"No inspections match.":"No saved inspections yet."}</div>`;
  let last="";return L.map(I=>{const i=I.info,d=i.date||"",mo=d?new Date(+d.slice(0,4),+d.slice(5,7)-1,1).toLocaleString(undefined,{month:"long",year:"numeric"}):"No date",h=mo!==last?`<h3 class="month">${esc(mo)}</h3>`:"";last=mo;
   const op=I.items.filter(isOpen).length,sf=I.items.filter(isSafety).length,cover=I.items.find(x=>x.media.length);
@@ -746,15 +755,19 @@ function histList(){const q=S.q.trim().toLowerCase();
   <div class="m"><span style="font-family:var(--mono)">${esc(reportId(I))}</span> · ${I.items.length} items, ${op} open${sf?`, <span class="p-Critical">${sf} safety</span>`:""}${I.id===S.cur?' · <span class="cur">Current</span>':""}</div>
   ${sentLine(I)?`<div class="sentline">${esc(sentLine(I))}</div>`:""}
   ${hitLine(I,q)}
-  <div class="acts"><button type="button" class="btn sm" data-h="open">Open</button>${op?`<button type="button" class="btn sm" data-h="follow">Follow-up visit</button>`:""}<button type="button" class="btn sm" data-h="send">Send</button><button type="button" class="btn sm" data-h="pdf">PDF</button><button type="button" class="btn sm danger" data-h="del">Delete</button></div>
+  <div class="acts"><button type="button" class="btn sm" data-h="open">Open</button>${op?`<button type="button" class="btn sm" data-h="follow">Follow-up visit</button>`:""}<button type="button" class="btn sm" data-h="send">Send</button>${REPS.some(r=>r.inspId===I.id)?`<button type="button" class="btn sm" data-h="reps">Reports (${REPS.filter(r=>r.inspId===I.id).length})</button>`:""}<button type="button" class="btn sm" data-h="pdf">PDF</button><button type="button" class="btn sm danger" data-h="del">Delete</button></div>
   </div></div>`}).join("")}
-function viewHist(){const n=S.insps.filter(I=>I.items.length).length;
- return`<div class="sec-h" style="margin-top:4px"><h2>History</h2><span class="eyebrow">${n} inspection${n===1?"":"s"}</span></div>
+const listedInsps=()=>S.insps.filter(I=>I.items.length||I.info.site||I.id===S.cur);
+function histBody(){return S.hTab==="reps"?repList():histList()}
+function viewHist(){const n=listedInsps().length,nr=REPS.length;
+ return`<div class="sec-h" style="margin-top:4px"><h2>History</h2><span class="eyebrow">${n} inspection${n===1?"":"s"} · ${nr} report${nr===1?"":"s"}</span></div>
+ <div class="chips" role="group" aria-label="Show" style="margin-bottom:10px"><button type="button" class="chip" data-htab="insp" aria-pressed="${S.hTab!=="reps"}">Inspections<span class="n">${n}</span></button><button type="button" class="chip" data-htab="reps" aria-pressed="${S.hTab==="reps"}">Saved reports<span class="n">${nr}</span></button></div>
  <div class="grid2" style="margin-bottom:10px"><button type="button" class="btn pri" id="hNew">Start new inspection</button><button type="button" class="btn" id="hXlsx">Export all to Excel</button></div>
  <div class="grid2 stack" style="margin-bottom:6px">
-  <label class="f"><span>Search</span><input id="hq" type="search" value="${esc(S.q)}" placeholder="Site, project #, room, item text, date" autocomplete="off"></label>
+  <label class="f"><span>Search</span><input id="hq" type="search" value="${esc(S.q)}" placeholder="${S.hTab==="reps"?"Site, report ID, date, recipient":"Site, project #, room, item text, date"}" autocomplete="off"></label>
   <label class="f"><span>Type</span><select id="hType">${["",...INSP_TYPES].map(t=>`<option value="${esc(t)}"${S.qType===t?" selected":""}>${t||"All types"}</option>`).join("")}</select></label></div>
- <div class="hist" id="hlist">${histList()}</div>`}
+ <div class="hist" id="hlist">${histBody()}</div>
+ <p class="note-line">Everything here is saved on this device. Each browser and the installed app keep separate copies. If earlier inspections are missing, open the version you used before, go to Settings › Back up everything, then restore that backup here.</p>`}
 
 /* ---------- view: more ---------- */
 function viewMore(){const s=S.settings,days=S.lastBackup?Math.floor((Date.now()-new Date(S.lastBackup))/864e5):null;
@@ -863,13 +876,14 @@ function renderSend(){const{I}=SEND,sel=distFor(I),cs=contacts(),emails=distPeop
   ${emails.length?`<p class="addr">${esc(emails.join(", "))}</p>`:""}
   ${log.length?`<section><span class="eyebrow">Send log</span><div class="slog">${log.map(l=>`<div>${esc(new Date(l.t).toLocaleString([], {month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}))} · ${esc(l.what)} · ${esc(l.to.length?l.to.join(", "):"recipients chosen in the mail app")}</div>`).join("")}</div></section>`:""}
  </div>`}
-function logSent(I,what,to){I.sent=I.sent||[];I.sent.push({t:new Date().toISOString(),what,to});saveInsp(I,true)}
+function logSent(I,what,to){I.sent=I.sent||[];I.sent.push({t:new Date().toISOString(),what,to});saveInsp(I,true);markSent(I,to)}
 async function prepSend(btn){const{I}=SEND;btn.disabled=true;btn.textContent="Building…";
  try{await flushSaves();const files=[];
   if(SEND.fmt==="zip"){busy("Building package…");files.push(new File([await buildZip(I)],baseName(I,"Field-Report-Package")+".zip",{type:MIME.zip}))}
   else{busy("Building PDF…");files.push(new File([await buildPdf(I)],baseName(I,"Field-Report")+".pdf",{type:MIME.pdf}));
    if(SEND.fmt==="pdfx"){busy("Building Excel…");files.push(new File([await buildXlsx(I)],baseName(I,"Observations")+".xlsx",{type:MIME.xlsx}))}}
   SEND.files=files;SEND.size=files.reduce((a,f)=>a+f.size,0);
+  for(const f of files){const k=f.name.split(".").pop().toLowerCase();if(k==="pdf"||k==="xlsx")await keepReport(I,f,f.name,k)}
   let can=false;try{can=!!(navigator.share&&navigator.canShare&&navigator.canShare({files}))}catch(e){}
   SEND.mode=IN_CLAUDE?"claude":can?"share":"mail";
  }catch(e){toast((e&&e.message)||"Couldn't build the report.")}
@@ -933,14 +947,35 @@ async function shareApp(){const url=appURL(),text="Install the SDUSD Field Repor
  if(navigator.share){try{await navigator.share({title:"SDUSD Field Report",text,url});return}catch(e){if(e&&e.name==="AbortError")return}}
  copyText(url,"App link copied.")}
 
+
+/* ---------- saved reports archive ---------- */
+async function keepReport(I,blob,name,kind){try{const i=I.info,now=Date.now();
+  // building the same file again within a few minutes replaces the earlier copy
+  for(const r of REPS.filter(r=>r.inspId===I.id&&r.kind===kind&&now-new Date(r.t)<180000)){try{await dbDel("reports",r.id)}catch(e){}REPS=REPS.filter(x=>x!==r)}
+  const rec={id:uid(),inspId:I.id,t:new Date().toISOString(),name,kind,size:blob.size,blob,site:i.site,area:i.area,date:i.date,type:i.type,rid:reportId(I),items:I.items.length,open:I.items.filter(isOpen).length,via:"saved",to:[]};
+  await dbPut("reports",rec);REPS.push(rec)}catch(e){}}
+async function markSent(I,to){const now=Date.now();for(const r of REPS.filter(r=>r.inspId===I.id&&now-new Date(r.t)<1800000)){r.via="sent";r.to=to||[];r.sentAt=new Date().toISOString();try{await dbPut("reports",r)}catch(e){}}}
+function repList(){const q=S.q.trim().toLowerCase();
+ const L=[...REPS].filter(r=>!q||[r.site,r.area,r.rid,r.type,r.date,fmtDate(r.date),r.name,(r.to||[]).join(" ")].join(" ").toLowerCase().includes(q)).sort((a,b)=>b.t.localeCompare(a.t));
+ if(!L.length)return`<div class="empty">${q?"No saved reports match.":"<h3>No saved reports yet</h3><span>Every PDF and Excel file you make or send from now on is kept here, so you can share it again any time.</span>"}</div>`;
+ let last="";return L.map(r=>{const d=new Date(r.t),mo=d.toLocaleString(undefined,{month:"long",year:"numeric"}),h=mo!==last?`<h3 class="month">${esc(mo)}</h3>`:"";last=mo;
+  const gone=!S.insps.some(x=>x.id===r.inspId);
+  return h+`<div class="rcard" data-rep="${r.id}"><span class="rbadge ${r.kind}">${r.kind==="xlsx"?"XLSX":"PDF"}</span><div style="min-width:0">
+   <h3>${esc(r.site||"Untitled site")}${r.area?" · "+esc(r.area):""}</h3>
+   <div class="m">${esc(r.type||"")} · ${esc(fmtDate(r.date))} · <span style="font-family:var(--mono)">${esc(r.rid)}</span></div>
+   <div class="m">Made ${esc(d.toLocaleString([], {month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}))} · ${fmtBytes(r.size||0)} · ${r.items} items, ${r.open} open</div>
+   ${r.via==="sent"?`<div class="sentline">Sent${r.to&&r.to.length?" to "+esc(r.to.join(", ")):""}</div>`:""}
+   <div class="acts"><button type="button" class="btn sm pri" data-r="share">Share / save</button>${gone?"":`<button type="button" class="btn sm" data-r="insp">Open inspection</button>`}<button type="button" class="btn sm danger" data-r="del">Delete</button></div>
+  </div></div>`}).join("")}
+
 /* ---------- app events ---------- */
 document.querySelector(".tabs").addEventListener("click",e=>{const t=e.target.closest(".tab");if(!t)return;S.view=t.dataset.view;render();window.scrollTo(0,0)});
 $("app").addEventListener("input",e=>{const el=e.target,I=cur();
  if(el.dataset.h&&el.tagName!=="BUTTON"){I.info[el.dataset.h]=el.value;saveInsp(I);if(el.dataset.h==="site"||el.dataset.h==="date"){const h=$("hdrCard").querySelector("h2");if(h&&el.dataset.h==="site")h.textContent=el.value||"New inspection"}return}
- if(el.id==="hq"){S.q=el.value;$("hlist").innerHTML=histList();hydrate($("hlist"));return}
+ if(el.id==="hq"){S.q=el.value;$("hlist").innerHTML=histBody();hydrate($("hlist"));return}
  if(el.dataset.sb){S.settings[el.dataset.sb]=el.checked;saveMeta();return}
  if(el.dataset.s){S.settings[el.dataset.s]=el.value;saveMeta();$("orgLine").textContent=S.settings.dept||S.settings.org||"Field Report"}});
-$("app").addEventListener("change",e=>{if(e.target.dataset.sb){S.settings[e.target.dataset.sb]=e.target.checked;saveMeta();return}if(e.target.id==="hType"){S.qType=e.target.value;$("hlist").innerHTML=histList();hydrate($("hlist"))}
+$("app").addEventListener("change",e=>{if(e.target.dataset.sb){S.settings[e.target.dataset.sb]=e.target.checked;saveMeta();return}if(e.target.id==="hType"){S.qType=e.target.value;$("hlist").innerHTML=histBody();hydrate($("hlist"))}
  if(e.target.dataset.h==="date"||e.target.dataset.h==="type"){const I=cur();I.info[e.target.dataset.h]=e.target.value;saveInsp(I);if(e.target.dataset.h==="type")render()}});
 $("app").addEventListener("click",async e=>{const b=e.target.closest("button");if(!b)return;
  if(b.id==="hdrToggle"){S.hdrOpen=!S.hdrOpen;render();return}
@@ -951,6 +986,12 @@ $("app").addEventListener("click",async e=>{const b=e.target.closest("button");i
  if(b.dataset.exp){const I=cur();if(!I.items.length){toast("Add at least one observation first.");return}
   return b.dataset.exp==="pdf"?exportPdf(I,b):b.dataset.exp==="xlsx"?exportXlsx(I,b):exportZip(I,b)}
  if(b.id==="rSend"){const I=cur();if(!I.items.length){toast("Add at least one observation first.");return}openSend(I);return}
+ if(b.dataset.htab){S.hTab=b.dataset.htab;S.q="";render();return}
+ const rc=b.closest(".rcard");if(rc){const r=REPS.find(x=>x.id===rc.dataset.rep);if(!r)return;const a=b.dataset.r;
+  if(a==="share"){saveFile(r.blob,r.name,"Saved report from "+new Date(r.t).toLocaleDateString([], {month:"short",day:"numeric",year:"numeric"})+".");return}
+  if(a==="insp"){const I=S.insps.find(x=>x.id===r.inspId);if(!I){toast("That inspection was deleted. The saved report is still here.");return}S.cur=I.id;saveMeta();S.view="insp";S.filter="all";S.hdrOpen=false;render();window.scrollTo(0,0);return}
+  if(a==="del")return arm(b,"rdel"+r.id,"Tap to delete",async()=>{try{await dbDel("reports",r.id)}catch(e){}REPS=REPS.filter(x=>x!==r);render();toast("Saved report deleted.")});
+  return}
  if(b.id==="hNew"){startNew();return}
  if(b.id==="hXlsx"){exportAll(b);return}
  if(b.id==="mBackup"){backupAll(b);return}
@@ -962,7 +1003,8 @@ $("app").addEventListener("click",async e=>{const b=e.target.closest("button");i
   if(a==="open"){S.cur=I.id;saveMeta();S.view="insp";S.filter="all";S.hdrOpen=!I.items.length;render();window.scrollTo(0,0);return}
   if(a==="follow"){followUp(I);return}
   if(a==="pdf"){exportPdf(I,b);return}
-  if(a==="send"){openSend(I);return}
+  if(a==="send"){if(!I.items.length){toast("This inspection has no observations yet.");return}openSend(I);return}
+  if(a==="reps"){S.hTab="reps";S.q=reportId(I).toLowerCase();render();return}
   if(a==="del")return arm(b,"hdel"+I.id,"Tap to delete",async()=>{await deleteInsp(I);render();toast("Inspection deleted.")})}});
 
 function startNew(){const I=cur();if(I&&!I.items.length&&!I.info.site){S.view="insp";S.hdrOpen=true;render();toast("This inspection is still blank. Fill in the site to begin.");return}
@@ -977,15 +1019,15 @@ async function deleteInsp(I){S.insps=S.insps.filter(x=>x!==I);for(const x of I.i
 
 /* ---------- file output ---------- */
 let DL;async function getDL(){if(DL!==undefined)return DL;try{DL=window.claude&&window.claude.use?await window.claude.use("downloads"):null}catch(e){DL=null}return DL}
-async function saveFile(blob,name){const dl=await getDL();
+async function saveFile(blob,name,note){const dl=await getDL();
  if(dl){try{await dl.save({filename:name,data:blob});toast("Saved "+name);return true}catch(e){const c=e&&e.code;if(c==="declined")return false;if(c==="too_large"){toast("That file is too large to save here. Try PDF or Excel on their own.");return false}if(c==="rate_limited"){toast("A save is already waiting for you to confirm.");return false}}}
- return readyBar(blob,name)}
+ return readyBar(blob,name,note)}
 const MIME={pdf:"application/pdf",xlsx:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",zip:"application/zip",json:"application/json"};
 function downloadBlob(blob,name){const u=URL.createObjectURL(blob),a=document.createElement("a");a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),60000)}
 // Shows the finished file with Share / Save buttons so the tap that opens the share sheet is fresh.
-function readyBar(blob,name){busy(false);return new Promise(resolve=>{const el=$("ready"),ext=name.split(".").pop().toLowerCase(),file=new File([blob],name,{type:MIME[ext]||blob.type||"application/octet-stream"});
+function readyBar(blob,name,note){busy(false);return new Promise(resolve=>{const el=$("ready"),ext=name.split(".").pop().toLowerCase(),file=new File([blob],name,{type:MIME[ext]||blob.type||"application/octet-stream"});
  let canShare=false;try{canShare=!!(navigator.canShare&&navigator.canShare({files:[file]}))}catch(e){}
- el.innerHTML=`<div><b>Ready</b> <span class="muted">${fmtBytes(blob.size)}</span><div class="nm">${esc(name)}</div></div>
+ el.innerHTML=`<div><b>Ready</b> <span class="muted">${fmtBytes(blob.size)}</span><div class="nm">${esc(name)}</div>${note?`<div class="muted" style="font-size:13px;margin-top:2px">${esc(note)}</div>`:""}</div>
   <div class="row">${canShare?`<button type="button" class="btn pri" id="rShare">Share or email</button>`:""}<button type="button" class="btn${canShare?"":" pri"}" id="rSave">Save to device</button><button type="button" class="btn ghost" id="rClose" aria-label="Close" style="flex:0 0 auto">✕</button></div>`;
  el.hidden=false;const done=v=>{el.hidden=true;el.innerHTML="";resolve(v)};
  $("rClose").onclick=()=>done(false);
@@ -1048,7 +1090,7 @@ async function buildPdf(I){if(!window.jspdf)throw new Error("The PDF tool didn't
  for(let p=1;p<=n;p++){d.setPage(p);if(p>1){d.setFillColor(0,33,71);d.rect(0,0,PW,8,"F");d.setFillColor(255,201,48);d.rect(0,8,PW,2,"F")}d.setDrawColor(210,217,227);d.setLineWidth(.6);d.line(M,PH-36,PW-M,PH-36);d.setFont("helvetica","normal");d.setFontSize(8.5);d.setTextColor(120,130,142);txt(rid+"  ·  Generated "+gen,M,PH-24);txt("Page "+p+" of "+n,PW-M,PH-24,{align:"right"})}
  return d.output("blob")}
 async function withBtn(btn,label,fn){const l=btn.textContent;btn.disabled=true;btn.textContent=label;busy(label);try{await fn()}catch(e){toast((e&&e.message)||"Something went wrong building that file.")}busy(false);btn.disabled=false;btn.textContent=l}
-function exportPdf(I,btn){return withBtn(btn,"Building PDF…",async()=>{await flushSaves();const b=await buildPdf(I);await saveFile(b,baseName(I,"Field-Report")+".pdf")})}
+function exportPdf(I,btn){return withBtn(btn,"Building PDF…",async()=>{await flushSaves();const b=await buildPdf(I),n=baseName(I,"Field-Report")+".pdf";await keepReport(I,b,n,"pdf");await saveFile(b,n,"Also kept in History › Saved reports.")})}
 
 function itemRow(I,x,withHdr){const X=x.x||{},i=I.info,photos=[],videos=[];
  x.media.forEach((m,n)=>{const mm=mediaMeta.get(m);(mm&&mm.kind==="video"?videos:photos).push(m)});
@@ -1069,7 +1111,7 @@ async function buildXlsx(I){if(!window.XLSX)throw new Error("The Excel tool didn
  XLSX.utils.book_append_sheet(wb,sheet(groupCounts(I.items.filter(isOpen),x=>x.trade).map(([k,n])=>({"Trade":k,"Open Items":n}))),"By Trade");
  XLSX.utils.book_append_sheet(wb,sheet([["Report ID",reportId(I)],...kvRows(i),["Observations",I.items.length],["Open",T.Open],["In Progress",T["In Progress"]],["Fixed",T.Fixed],["Verified",T.Verified],["Safety / critical",T.Safety]].map(([a,b])=>({Field:a,Value:b})),{Field:20,Value:50}),"Summary");
  return new Blob([XLSX.write(wb,{bookType:"xlsx",type:"array"})],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"})}
-function exportXlsx(I,btn){return withBtn(btn,"Building Excel…",async()=>{await flushSaves();await saveFile(await buildXlsx(I),baseName(I,"Observations")+".xlsx")})}
+function exportXlsx(I,btn){return withBtn(btn,"Building Excel…",async()=>{await flushSaves();const b=await buildXlsx(I),n=baseName(I,"Observations")+".xlsx";await keepReport(I,b,n,"xlsx");await saveFile(b,n,"Also kept in History › Saved reports.")})}
 function extFor(mm){const t=(mm.type||"").toLowerCase();if(mm.kind==="image")return"jpg";if(t.includes("quicktime")||/\.mov$/i.test(mm.name||""))return"mov";if(t.includes("webm"))return"webm";if(t.includes("3gp"))return"3gp";return"mp4"}
 function mediaFileName(I,x,n,mm){return(mm.kind==="video"?"Videos/":"Photos/")+itemCode(I,x)+"-"+(n+1)+"."+extFor(mm)}
 async function exportZip(I,btn){return withBtn(btn,"Building package…",async()=>{await flushSaves();const out=await buildZip(I);await saveFile(out,baseName(I,"Field-Report-Package")+".zip")})}
@@ -1093,7 +1135,8 @@ async function backupAll(btn){return withBtn(btn,"Building backup…",async()=>{
  const z=new JSZip(),ids=new Set();S.insps.forEach(I=>I.items.forEach(x=>x.media.forEach(m=>ids.add(m))));const media=[];
  for(const id of ids){const m=await dbGet("media",id);if(!m)continue;const e={id,kind:m.kind,type:m.type,name:m.name,w:m.w,h:m.h,size:m.size,created:m.created,file:"media/"+id+"."+extFor(m)};z.file(e.file,m.blob);
   if(m.poster){e.poster="media/"+id+"-poster.jpg";z.file(e.poster,m.poster)}if(m.orig){e.orig="media/"+id+"-original.jpg";z.file(e.orig,m.orig)}media.push(e)}
- z.file("data.json",JSON.stringify({app:"sdusd-field-report",version:2,exported:new Date().toISOString(),settings:S.settings,inspections:S.insps.filter(I=>I.items.length||I.info.site),media}));
+ const reports=[];for(const r of REPS){if(!r.blob)continue;const {blob,...meta}=r;meta.file="reports/"+r.id+"."+r.kind;z.file(meta.file,blob);reports.push(meta)}
+ z.file("data.json",JSON.stringify({app:"sdusd-field-report",version:3,exported:new Date().toISOString(),settings:S.settings,inspections:S.insps.filter(I=>I.items.length||I.info.site),media,reports}));
  const out=await z.generateAsync({type:"blob",compression:"STORE"});
  if(await saveFile(out,"Field-Report-Backup_"+today()+".zip")){S.lastBackup=new Date().toISOString();saveMeta();setStat();if(S.view==="more")render()}})}
 $("inRestore").onchange=async e=>{const f=e.target.files[0];e.target.value="";if(!f)return;busy("Restoring…");
@@ -1103,6 +1146,7 @@ $("inRestore").onchange=async e=>{const f=e.target.files[0];e.target.value="";if
    for(const m of r.media||[]){if(await dbGet("media",m.id))continue;const fz=z.file(m.file);if(!fz)continue;const rec={id:m.id,kind:m.kind,type:m.type,name:m.name,w:m.w,h:m.h,size:m.size,created:m.created,blob:new Blob([await fz.async("arraybuffer")],{type:m.type})};
     if(m.poster&&z.file(m.poster))rec.poster=new Blob([await z.file(m.poster).async("arraybuffer")],{type:"image/jpeg"});if(m.orig&&z.file(m.orig))rec.orig=new Blob([await z.file(m.orig).async("arraybuffer")],{type:"image/jpeg"});await dbPut("media",rec)}
    for(const I of r.inspections||[]){if(S.insps.some(x=>x.id===I.id))continue;S.insps.push(I);await dbPut("insp",I);added++}
+   for(const m of r.reports||[]){if(REPS.some(x=>x.id===m.id))continue;const fz=z.file(m.file);if(!fz)continue;const {file,...rec}=m;rec.blob=new Blob([await fz.async("arraybuffer")],{type:MIME[m.kind]||"application/octet-stream"});try{await dbPut("reports",rec);REPS.push(rec)}catch(x){}}
    mergeContacts(r.settings)}
   busy(false);render();toast(added?added+" inspection"+(added===1?"":"s")+" restored.":"Nothing new to restore. Those inspections are already here.")}
  catch(x){busy(false);toast(x&&x.message&&x.message!=="bad"?x.message:"That file isn't a backup from this app.")}};
@@ -1132,7 +1176,7 @@ async function loadSample(){const I=cur();Object.assign(I.info,{site:"Sample Ele
  try{DB=await idbOpen()}catch(e){DB=null}
  try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist()}catch(e){}
  try{const meta=await dbGet("meta","app");if(meta){S.cur=meta.cur;S.settings={...S.settings,...(meta.settings||{})};S.lastBackup=meta.lastBackup||null}
-  S.insps=(await dbAll("insp"))||[]}catch(e){S.insps=[]}
+  S.insps=(await dbAll("insp"))||[];try{REPS=(await dbAll("reports"))||[]}catch(e){REPS=[]}}catch(e){S.insps=[]}
  for(const I of S.insps){I.items=I.items||[];I.info={site:"",project:"",projectNo:"",area:"",type:"Site Investigation",date:today(),time:"",inspector:"",company:"",weather:"",attendees:"",...I.info};for(const x of I.items){x.x=x.x||{};x.media=x.media||[]}}
  if(!cur()){const L=[...S.insps].sort((a,b)=>(b.updated||"").localeCompare(a.updated||""));if(L[0])S.cur=L[0].id;else{const N=newInsp();S.insps.push(N);S.cur=N.id;saveInsp(N,true)}saveMeta()}
  S.hdrOpen=!cur().items.length;render();setStat();

@@ -1,5 +1,5 @@
 // Field Report service worker: keeps the app working offline.
-const V = "field-report-v6";
+const V = "field-report-v7";
 const FONTS = "field-report-fonts";
 const SHELL = ["./", "./index.html", "./manifest.webmanifest",
   "./lib/jspdf.umd.min.js", "./lib/xlsx.full.min.js", "./lib/jszip.min.js", "./lib/qrcode.min.js",
