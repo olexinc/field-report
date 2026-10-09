@@ -1,0 +1,107 @@
+SDUSD FIELD REPORT - INSTALLABLE APP FOR IPHONE AND ANDROID
+===========================================================
+
+This folder is a complete phone app. Put it on a website once, and anyone
+can install it from a link. It gets the Plant Operations seal as its
+home-screen icon, opens full screen like any other app, works offline on
+site, and uses the camera, GPS, voice and the phone's share menu.
+
+The same link works on iPhone and Android. There is nothing to approve in
+an app store, and updates reach everyone automatically.
+
+
+STEP 1 - PUT THE FOLDER ONLINE (one time, about 5 minutes, free)
+-----------------------------------------------------------------
+
+Use a computer for this step.
+
+Option A: Netlify Drop (easiest)
+  1. Unzip the package so you have the folder "sdusd-field-report-app".
+  2. Go to https://app.netlify.com/drop and sign up (free).
+  3. Drag the whole folder onto the page.
+  4. Netlify gives you an address like https://random-name-123.netlify.app
+  5. Rename it: Site configuration > Change site name, for example
+     https://sdusd-field-report.netlify.app
+  6. Claim the site to your account when Netlify asks, so it stays up.
+
+Option B: GitHub Pages (free)
+  Upload the folder's contents to a public GitHub repository, then turn on
+  Settings > Pages > Deploy from a branch > main > / (root).
+  If you connect GitHub in Claude, Claude can do this step for you.
+
+Option C: District web server
+  Ask IT to place the folder on any https:// web server. It is only static
+  files, with no database or server code.
+
+
+STEP 2 - INSTALL IT ON YOUR PHONE
+---------------------------------
+
+iPhone: open the link in Safari, tap the Share button, then
+        "Add to Home Screen", then Add.
+Android: open the link in Chrome. Tap "Install" on the banner, or tap the
+         three-dot menu, then "Install app".
+
+Open it from the new icon and allow Location and Camera when asked.
+
+
+STEP 3 - GIVE IT TO YOUR TEAM
+-----------------------------
+
+In the app: Settings > Share the app with your team.
+  - "Share app link" sends the link by text, email or Teams with install
+    instructions included.
+  - Coworkers can also scan the QR code on your screen with their phone
+    camera.
+
+
+SENDING REPORTS TO STAKEHOLDERS
+-------------------------------
+
+1. Report tab > "Send report to stakeholders" (or History > Send for a past
+   inspection).
+2. Add stakeholders once: name, email and role. They're saved and picked
+   automatically for the same project next time. On Android you can also
+   pick from your phone contacts.
+3. Choose what to attach:
+   - PDF: photos, notes, GPS and a signature line. Best for most people.
+   - PDF + Excel: adds a spreadsheet for tracking items.
+   - Full package: includes every original photo and video. It's usually
+     too big for email, so share it to Google Drive, OneDrive or Teams.
+4. The subject and message are written for you: a summary, then the open
+   and critical items with who is responsible and due dates. Edit as needed.
+5. Tap "Send with attachment", then choose Mail, Outlook, Gmail or Teams.
+   The recipient addresses are copied, so paste them into the To line if
+   your mail app leaves it blank.
+
+"Summary email" opens your mail app with recipients, subject and message
+filled in, without an attachment. Use it for quick updates.
+
+Every send is logged on the inspection, with date and recipients.
+The PDF lists everyone on the distribution.
+
+
+UPDATING THE APP LATER
+----------------------
+Replace the files on the website with the new version (on Netlify:
+Deploys > drag the new folder). Phones pick up the update the next time the
+app opens with a connection. Saved inspections and stakeholders are kept.
+
+
+GOOD TO KNOW
+------------
+- Inspections, photos and stakeholders stay on each person's own phone.
+  Nothing is uploaded anywhere unless someone taps Send or Share.
+- Back up weekly: Settings > Back up everything. A backup restores on a new
+  phone, including the stakeholder list.
+- Always open it from the home-screen icon. A browser tab keeps its own
+  separate copy of the data.
+- Keep the same web address. If it ever changes, back up first, install
+  from the new address, then restore.
+- App Store or Google Play listing: possible later, but it needs an Apple
+  Developer account ($99/year) and a Google Play account ($25 one time),
+  plus store review. Once the app is online, https://www.pwabuilder.com can
+  package it for both stores. Installing from the link gives the same app
+  without that.
+- Before rolling out district-wide, check with IT about approved apps and
+  how photos of school sites should be stored and shared.
