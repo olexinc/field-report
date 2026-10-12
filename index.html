@@ -325,7 +325,7 @@ input[type=checkbox]{width:22px;height:22px;min-height:0;accent-color:var(--acce
 <script>
 "use strict";
 /* ---------- constants ---------- */
-const INSP_TYPES=["Site Investigation","Construction Progress","Punch List","Warranty Walk","Existing Conditions","Safety Observation","RFI Field Verification","Completion / Closeout","Other"];
+const INSP_TYPES=["Site Investigation","Construction Progress","Punch List","Warranty Walk","Existing Conditions","Safety Observation","RFI Field Verification","Completion / Closeout","Turn Over Walk","Other"];
 const OBS=[["deficiency","Deficiency / Punch"],["progress","Progress"],["safety","Safety / Hazard"],["condition","Existing Condition"],["rfi","RFI"],["warranty","Warranty"],["completion","Completion Check"],["note","General Note"]];
 const OBS_L=Object.fromEntries(OBS);
 const TRADES=["General","Site / Civil","Concrete / Paving","Structural","Roofing","Exterior Envelope","Doors / Hardware","Windows / Glazing","Drywall / Paint","Flooring","Casework / Millwork","Plumbing","HVAC / Mechanical","Electrical","EV Charging","Low Voltage / Data","Fire Alarm / Life Safety","Fire Sprinkler","Security / Access Control","ADA / Accessibility","Landscaping / Irrigation","Elevator","Kitchen Equipment","Hazmat / Abatement","Other"];
@@ -1009,7 +1009,7 @@ $("app").addEventListener("click",async e=>{const b=e.target.closest("button");i
 
 function startNew(){const I=cur();if(I&&!I.items.length&&!I.info.site){S.view="insp";S.hdrOpen=true;render();toast("This inspection is still blank. Fill in the site to begin.");return}
  const N=newInsp(I?{...I.info,area:"",project:I.info.project,projectNo:I.info.projectNo}:null);S.insps.push(N);S.cur=N.id;S.hdrOpen=true;S.filter="all";saveInsp(N,true);saveMeta();S.view="insp";render();window.scrollTo(0,0);toast("New inspection started. Past ones are in History.")}
-function followUp(P){const N=newInsp(P.info);N.info.type=P.info.type==="Punch List"||P.info.type==="Warranty Walk"?P.info.type:"Site Investigation";
+function followUp(P){const N=newInsp(P.info);N.info.type=["Punch List","Warranty Walk","Turn Over Walk"].includes(P.info.type)?P.info.type:"Site Investigation";
  for(const x of P.items.filter(isOpen)){const y=newItem(N,x.type);Object.assign(y,JSON.parse(JSON.stringify({...x,id:y.id,seq:y.seq,created:y.created})));y.carriedFrom=itemCode(P,x);y.followup=x.followup?x.followup+"\n":"";y.media=[...x.media];N.items.push(y)}
  S.insps.push(N);S.cur=N.id;S.hdrOpen=false;S.filter="all";saveInsp(N,true);saveMeta();S.view="insp";render();window.scrollTo(0,0);
  toast(N.items.length+" open item"+(N.items.length===1?"":"s")+" carried over. Update each status as you walk.")}
