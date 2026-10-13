@@ -410,12 +410,21 @@ function shrinkImage(file,max=1600){return new Promise(res=>{const u=URL.createO
  img.onload=()=>{const k=Math.min(1,max/Math.max(img.naturalWidth,img.naturalHeight)),c=document.createElement("canvas");c.width=Math.round(img.naturalWidth*k);c.height=Math.round(img.naturalHeight*k);c.getContext("2d").drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(u);c.toBlob(b=>res(b?{blob:b,w:c.width,h:c.height}:null),"image/jpeg",.82)};
  img.onerror=()=>{URL.revokeObjectURL(u);res(null)};img.src=u})}
 function videoPoster(blob){return new Promise(res=>{const u=URL.createObjectURL(blob),v=document.createElement("video");let done=false;
- const fin=r=>{if(done)return;done=true;URL.revokeObjectURL(u);v.removeAttribute("src");try{v.load()}catch(e){}res(r)};
- const t=setTimeout(()=>fin(null),6000);v.muted=true;v.playsInline=true;v.preload="auto";
- v.onloadeddata=()=>{try{v.currentTime=Math.min(.5,(v.duration||1)/3)}catch(e){fin(null)}};
- v.onseeked=()=>{try{const k=Math.min(1,960/Math.max(v.videoWidth,v.videoHeight)),c=document.createElement("canvas");c.width=Math.max(1,Math.round(v.videoWidth*k));c.height=Math.max(1,Math.round(v.videoHeight*k));c.getContext("2d").drawImage(v,0,0,c.width,c.height);c.toBlob(b=>{clearTimeout(t);fin(b)},"image/jpeg",.8)}catch(e){clearTimeout(t);fin(null)}};
- v.onerror=()=>{clearTimeout(t);fin(null)};v.src=u})}
-async function mediaURL(id){if(urlCache.has(id))return urlCache.get(id);const m=await dbGet("media",id);if(!m)return null;
+ v.muted=true;v.defaultMuted=true;v.playsInline=true;v.setAttribute("muted","");v.setAttribute("playsinline","");v.preload="auto";
+ v.style.cssText="position:fixed;left:-9999px;top:0;width:2px;height:2px;opacity:0;pointer-events:none";document.body.appendChild(v);
+ const fin=r=>{if(done)return;done=true;clearTimeout(t);try{v.pause()}catch(e){}URL.revokeObjectURL(u);v.removeAttribute("src");try{v.load()}catch(e){}v.remove();res(r)};
+ const t=setTimeout(()=>fin(null),10000);
+ const grab=()=>{if(done||!v.videoWidth)return;try{const k=Math.min(1,960/Math.max(v.videoWidth,v.videoHeight)),c=document.createElement("canvas");c.width=Math.max(1,Math.round(v.videoWidth*k));c.height=Math.max(1,Math.round(v.videoHeight*k));c.getContext("2d").drawImage(v,0,0,c.width,c.height);c.toBlob(b=>fin(b),"image/jpeg",.8)}catch(e){fin(null)}};
+ v.addEventListener("loadedmetadata",()=>{try{v.currentTime=Math.min(.5,(v.duration||1)/3)}catch(e){}});
+ v.addEventListener("seeked",grab);
+ v.addEventListener("error",()=>fin(null));
+ v.src=u;
+ try{const p=v.play();if(p&&p.then)p.then(()=>setTimeout(()=>{try{v.pause()}catch(e){}grab()},350)).catch(()=>{})}catch(e){}})}
+// Videos saved before the thumbnail fix get one now.
+const posterTries=new Set();
+async function ensurePoster(m){if(!m||m.kind!=="video"||m.poster||posterTries.has(m.id))return m;posterTries.add(m.id);
+ try{const p=await videoPoster(m.blob);if(p){m.poster=p;await dbPut("media",m)}}catch(e){}return m}
+async function mediaURL(id){if(urlCache.has(id))return urlCache.get(id);let m=await dbGet("media",id);if(!m)return null;m=await ensurePoster(m);
  const o={url:URL.createObjectURL(m.blob),poster:m.poster?URL.createObjectURL(m.poster):null,kind:m.kind,type:m.type,marked:!!m.orig};
  urlCache.set(id,o);mediaMeta.set(id,{kind:m.kind,type:m.type,name:m.name,marked:!!m.orig});return o}
 function dropURL(id){const o=urlCache.get(id);if(o){URL.revokeObjectURL(o.url);if(o.poster)URL.revokeObjectURL(o.poster)}urlCache.delete(id)}
@@ -542,7 +551,7 @@ function viewInsp(){const I=cur(),i=I.info,its=I.items;
 
 /* ---------- item editor sheet ---------- */
 function openEditor(id){editing=id;renderEditor();$("sheet").hidden=false;$("sheet").scrollTop=0;document.body.style.overflow="hidden"}
-function closeEditor(){if(rec){try{rec.stop()}catch(e){}}editing=null;$("sheet").hidden=true;$("sheet").innerHTML="";document.body.style.overflow="";render()}
+function closeEditor(){if(rec){try{rec.stop()}catch(e){}}{const I=cur();if(I)saveInsp(I,true)}editing=null;$("sheet").hidden=true;$("sheet").innerHTML="";document.body.style.overflow="";render()}
 function curItem(){const I=cur();return I&&I.items.find(x=>x.id===editing)}
 function renderEditor(){const I=cur(),x=curItem();if(!x)return closeEditor();const t=x.type,X=x.x||(x.x={});
  const extra=
@@ -832,6 +841,7 @@ function pdfImage(blob,max=1200){return new Promise(res=>{const u=URL.createObje
  im.onerror=()=>{URL.revokeObjectURL(u);res(null)};im.src=u})}
 
 let SEND=null;
+const vidCount=I=>I.items.reduce((a,x)=>a+x.media.filter(m=>(mediaMeta.get(m)||{}).kind==="video").length,0);
 function defaultSubject(I){const i=I.info;return`${i.site||"Site"}${i.area?" - "+i.area:""} | ${i.type||"Field"} Report | ${fmtDate(i.date)} (${reportId(I)})`}
 function defaultBody(I){const i=I.info,T=tally(I.items),open=I.items.filter(isOpen),s=S.settings;
  const rank=x=>isSafety(x)?0:overdue(x)?1:x.pri==="High"?2:3;
@@ -842,7 +852,7 @@ function defaultBody(I){const i=I.info,T=tally(I.items),open=I.items.filter(isOp
  const prog=i.overallPercent?`\nOverall progress: ${i.overallPercent}% complete${i.scheduledPercent?" (scheduled "+i.scheduledPercent+"%)":""}.`:"";
  const items=top.length?`\nItems needing attention:\n${top.map(line).join("\n")}${open.length>top.length?`\n...and ${open.length-top.length} more in the attached report.`:""}\n`:"\nAll items are verified complete.\n";
  return`Hello,\n\nAttached is the ${(i.type||"field").toLowerCase()} report for ${i.site||"the site"}${i.area?", "+i.area:""} from ${fmtDate(i.date)}.\n\nSummary: ${I.items.length} observation${I.items.length===1?"":"s"}. ${T.Open} open, ${T["In Progress"]} in progress, ${T.Fixed} fixed, ${T.Verified} verified.${T.Safety?" "+T.Safety+" safety / critical.":""}${prog}\n${items}\nPlease reply with any questions.\n\n${[i.inspector||s.inspector,s.dept,s.org].filter(Boolean).join("\n")}`}
-function openSend(I){SEND={I,fmt:"pdf",subject:defaultSubject(I),body:defaultBody(I),files:null,size:0,adding:false};renderSend();$("send").hidden=false;$("send").scrollTop=0;document.body.style.overflow="hidden"}
+function openSend(I){SEND={I,fmt:"pdf",subject:defaultSubject(I),body:defaultBody(I),files:null,size:0,adding:false};renderSend();$("send").hidden=false;$("send").scrollTop=0;document.body.style.overflow="hidden";loadMeta(I).then(()=>{if(SEND&&SEND.I===I&&!SEND.adding){const y=$("send").scrollTop;renderSend();$("send").scrollTop=y}})}
 function closeSend(){if(rec){try{rec.stop()}catch(e){}}$("send").hidden=true;$("send").innerHTML="";SEND=null;document.body.style.overflow="";render()}
 const canPickContacts=()=>!!(navigator.contacts&&navigator.contacts.select&&window.isSecureContext&&!IN_CLAUDE);
 function addForm(){return`<div class="card" style="margin-top:8px;display:flex;flex-direction:column;gap:8px">
@@ -867,7 +877,7 @@ function renderSend(){const{I}=SEND,sel=distFor(I),cs=contacts(),emails=distPeop
    ${SEND.adding?addForm():`<div class="grid2" style="margin-top:8px"><button type="button" class="btn sm" id="sAdd">Add stakeholder</button>${canPickContacts()?`<button type="button" class="btn sm" id="sPick">From phone contacts</button>`:cs.length>1?`<button type="button" class="btn sm" id="sAll">${sel.length===cs.length?"Clear all":"Select all"}</button>`:""}</div>`}
   </section>
   <section><span class="eyebrow">Attach</span><div class="chips" role="group" aria-label="Attachment" style="margin-top:6px">${fmts.map(([k,l])=>`<button type="button" class="chip" data-fmt="${k}" aria-pressed="${SEND.fmt===k}">${l}</button>`).join("")}</div>
-   <p class="muted" style="font-size:13px;margin:6px 0 0">${SEND.fmt==="zip"?"Includes the PDF, Excel and every original photo and video. Often too large for email, so share it to Google Drive or OneDrive.":SEND.fmt==="pdfx"?"The PDF for reading and the Excel file for tracking items.":"Photos, notes, GPS and a signature line. Best for most stakeholders."}</p></section>
+   <p class="muted" style="font-size:13px;margin:6px 0 0">${SEND.fmt==="zip"?"Includes the PDF, Excel and every original photo and video. Often too large for email, so share it to Google Drive or OneDrive.":(SEND.fmt==="pdfx"?"The PDF for reading and the Excel file for tracking items.":"Photos, notes, GPS and a signature line. Best for most stakeholders.")+(vidCount(I)?` <b>This inspection has ${vidCount(I)} video${vidCount(I)===1?"":"s"}, which a PDF can't play. Choose Full package to include ${vidCount(I)===1?"it":"them"}.</b>`:"")}</p></section>
   <label class="f"><span>Subject</span><input id="sSubj" value="${esc(SEND.subject)}"></label>
   <label class="f"><span>Message ${micBtn("sBody")}</span><textarea id="sBody" style="min-height:240px">${esc(SEND.body)}</textarea></label>
   <div id="sGo">${goHTML()}</div>
@@ -1075,12 +1085,15 @@ async function buildPdf(I){if(!window.jspdf)throw new Error("The PDF tool didn't
    need(below?27:14);d.setFont("helvetica","bold");d.setTextColor(13,27,46);d.text(lab,M,y);d.setFont("helvetica","normal");if(below)y+=13;
    for(let n=0;n<lines.length;n++){if(n&&need(13)){d.setFont("helvetica","normal")}d.text(lines[n],below?M:M+lw,y);y+=13}y+=2}
   // media grid
-  const ms=[];for(const id of x.media){const m=await dbGet("media",id);if(!m)continue;const src=m.kind==="video"?m.poster:m.blob;if(!src){ms.push({video:true,none:true});continue}const im=await pdfImage(src);if(im)ms.push({u:im.u,w:im.w,h:im.h,video:m.kind==="video"})}
+  const ms=[],vids=[];for(let j=0;j<x.media.length;j++){let m=await dbGet("media",x.media[j]);if(!m)continue;if(m.kind==="video"){m=await ensurePoster(m);vids.push(mediaFileName(I,x,j,m).split("/").pop())}
+   const fname=m.kind==="video"?mediaFileName(I,x,j,m).split("/").pop():"";const src=m.kind==="video"?m.poster:m.blob;if(!src){ms.push({video:true,none:true,fname});continue}const im=await pdfImage(src);if(im)ms.push({u:im.u,w:im.w,h:im.h,video:m.kind==="video",fname})}
   if(ms.length){y+=4;const cols=3,gap=8,cw=(CW-gap*(cols-1))/cols,ch=cw*.75;
    for(let n=0;n<ms.length;n+=cols){need(ch+6);for(let k=0;k<cols;k++){const m=ms[n+k];if(!m)continue;const x0=M+k*(cw+gap);d.setFillColor(235,239,244);d.rect(x0,y,cw,ch,"F");
      if(!m.none){const s=Math.min(cw/m.w,ch/m.h),w=m.w*s,h=m.h*s;d.addImage(m.u,"JPEG",x0+(cw-w)/2,y+(ch-h)/2,w,h,undefined,"FAST")}
-     if(m.video){d.setFillColor(0,0,0);d.rect(x0+cw-44,y+ch-17,40,13,"F");d.setTextColor(255,255,255);d.setFont("helvetica","bold");d.setFontSize(8);d.text("VIDEO",x0+cw-24,y+ch-7.5,{align:"center"})}}
+     if(m.video){const cx=x0+cw/2,cy=y+ch/2;d.setFillColor(0,33,71);d.circle(cx,cy,15,"F");d.setFillColor(255,201,48);d.triangle(cx-5,cy-8,cx-5,cy+8,cx+9,cy,"F");
+      d.setFont("helvetica","bold");d.setFontSize(7.5);const lab=clean("VIDEO  "+(m.fname||"")),lw=Math.min(cw-8,d.getTextWidth(lab)+10);d.setFillColor(0,0,0);d.rect(x0+4,y+ch-17,lw,13,"F");d.setTextColor(255,255,255);d.text(lab,x0+9,y+ch-7.6,{maxWidth:cw-16})}}
     y+=ch+gap}}
+  if(vids.length){need(26);d.setFont("helvetica","italic");d.setFontSize(9);d.setTextColor(90,104,120);const vl=d.splitTextToSize(clean((vids.length===1?"Video file ":"Video files ")+vids.join(", ")+": not playable inside a PDF. Included in the Full package (Videos folder) or available from the inspector."),CW);d.text(vl,M,y+2);y+=vl.length*11+2;d.setTextColor(13,27,46)}
   y+=4;d.setDrawColor(211,218,228);d.setLineWidth(.6);d.line(M,y,PW-M,y);y+=18}
  // signature
  need(70);y+=10;d.setDrawColor(20,33,48);d.setLineWidth(.8);d.line(M,y+30,M+250,y+30);d.line(M+300,y+30,PW-M,y+30);d.setFont("helvetica","normal");d.setFontSize(9);d.setTextColor(90,104,120);
