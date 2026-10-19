@@ -537,7 +537,8 @@ function viewInsp(){const I=cur(),i=I.info,its=I.items;
  const cnt={all:its.length,open:its.filter(isOpen).length,safety:its.filter(isSafety).length,rfi:its.filter(x=>x.type==="rfi").length};
  const shown=its.filter(x=>S.filter==="all"||(S.filter==="open"&&isOpen(x))||(S.filter==="safety"&&isSafety(x))||(S.filter==="rfi"&&x.type==="rfi"));
  const sum=[fmtDate(i.date),i.type,i.area].filter(Boolean).join(" · ");
- return`<section class="card${S.hdrOpen?" open":""}" id="hdrCard">
+ return`<button type="button" class="btn pri" id="hNew" style="width:100%;min-height:48px;margin-bottom:10px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>New inspection</button>
+ <section class="card${S.hdrOpen?" open":""}" id="hdrCard">
   <button type="button" class="hdr-sum" id="hdrToggle" aria-expanded="${S.hdrOpen}"><span class="t"><span class="eyebrow">Inspection <span style="font-family:var(--mono);letter-spacing:0">${esc(reportId(I))}</span></span><h2>${esc(i.site||"New inspection")}</h2><span class="m">${esc(sum)}</span></span>${ICON.chev}</button>
   ${S.hdrOpen?headerFields(i):""}
  </section>
@@ -771,7 +772,7 @@ function histBody(){return S.hTab==="reps"?repList():histList()}
 function viewHist(){const n=listedInsps().length,nr=REPS.length;
  return`<div class="sec-h" style="margin-top:4px"><h2>History</h2><span class="eyebrow">${n} inspection${n===1?"":"s"} · ${nr} report${nr===1?"":"s"}</span></div>
  <div class="chips" role="group" aria-label="Show" style="margin-bottom:10px"><button type="button" class="chip" data-htab="insp" aria-pressed="${S.hTab!=="reps"}">Inspections<span class="n">${n}</span></button><button type="button" class="chip" data-htab="reps" aria-pressed="${S.hTab==="reps"}">Saved reports<span class="n">${nr}</span></button></div>
- <div class="grid2" style="margin-bottom:10px"><button type="button" class="btn pri" id="hNew">Start new inspection</button><button type="button" class="btn" id="hXlsx">Export all to Excel</button></div>
+ <button type="button" class="btn" id="hXlsx" style="width:100%;margin-bottom:10px">Export all inspections to Excel</button>
  <div class="grid2 stack" style="margin-bottom:6px">
   <label class="f"><span>Search</span><input id="hq" type="search" value="${esc(S.q)}" placeholder="${S.hTab==="reps"?"Site, report ID, date, recipient":"Site, project #, room, item text, date"}" autocomplete="off"></label>
   <label class="f"><span>Type</span><select id="hType">${["",...INSP_TYPES].map(t=>`<option value="${esc(t)}"${S.qType===t?" selected":""}>${t||"All types"}</option>`).join("")}</select></label></div>
