@@ -548,6 +548,7 @@ function viewInsp(){const I=cur(),i=I.info,its=I.items;
  </div>
  <div class="items">${shown.length?shown.map(x=>itemCard(I,x)).join(""):`<div class="empty">Nothing in this filter.</div>`}</div>`
  :`<div class="empty"><h3>No observations yet</h3><span>Use the buttons at the bottom. <b>Photo</b> and <b>Video</b> open the camera, <b>Note</b> starts a written entry, and <b>Library</b> adds photos or video you already took.</span><button type="button" class="btn sm ghost" id="loadSample">Load a sample inspection to try it</button></div>`}
+ ${its.length?`<button type="button" class="btn" id="lAdd" style="width:100%;min-height:48px;margin-top:10px">+ Add observation</button>`:""}
  <p class="note-line">Avoid capturing students in photos and video.</p>`}
 
 /* ---------- item editor sheet ---------- */
@@ -598,7 +599,8 @@ function renderEditor(){const I=cur(),x=curItem();if(!x)return closeEditor();con
   <label class="f"><span>Follow-up / verification notes ${micBtn("e-follow")}</span><textarea id="e-follow" data-k="followup">${esc(x.followup)}</textarea></label>
   <div class="grid2"><label class="f"><span>Verified by</span><input data-k="verifiedBy" value="${esc(x.verifiedBy||"")}" placeholder="Name"></label><label class="f"><span>Verification date</span><input data-k="verifiedDate" type="date" value="${esc(x.verifiedDate||"")}"></label></div>
   <p class="from" style="margin:0">Logged ${new Date(x.created).toLocaleString([], {month:"short",day:"numeric",hour:"numeric",minute:"2-digit"})}</p>
-  <button type="button" class="btn pri" id="eDone2">Done</button>
+  <div class="grid2"><button type="button" class="btn" id="eDone2">Done</button><button type="button" class="btn pri" id="eNext">+ Add another observation</button></div>
+  <p class="from" style="margin:0">Add another keeps the same type, location and trade so you can log the next item in this area quickly.</p>
  </div>`;
  hydrate($("sheet"))}
 
@@ -610,6 +612,7 @@ $("sheet").addEventListener("input",e=>{const el=e.target,x=curItem();if(!x)retu
 $("sheet").addEventListener("change",e=>{const el=e.target;if(el.dataset.xb){const x=curItem();if(x){x.x[el.dataset.xb]=el.checked;saveInsp(cur())}}});
 $("sheet").addEventListener("click",async e=>{const b=e.target.closest("button");if(!b)return;const I=cur(),x=curItem();if(!x)return;
  if(b.id==="eDone"||b.id==="eDone2")return closeEditor();
+ if(b.id==="eNext"){saveInsp(I,true);addObservation(x);toast("Observation "+pad3(x.seq)+" saved. Now adding #"+pad3(I.seq)+".");return}
  if(b.id==="eDup"){const y=newItem(I,x.type),keep=JSON.parse(JSON.stringify(x));Object.assign(y,keep,{id:y.id,seq:y.seq,created:y.created,status:"Open",verifiedBy:"",verifiedDate:"",media:[],mediaRoles:{}});delete y.gps;I.items.push(y);saveInsp(I,true);editing=y.id;renderEditor();tagItem(I,y,false);toast("Observation duplicated. Add the new location and media.");return}
  if(b.id==="eDel")return arm(b,"del"+x.id,"Tap to delete",async()=>{for(const m of[...x.media])await deleteMediaRef(x,m);I.items=I.items.filter(y=>y!==x);saveInsp(I,true);closeEditor();toast("Observation deleted.")});
  if(b.dataset.mic){const ta=$(b.dataset.mic);if(ta)dictate(ta,b);return}
@@ -635,7 +638,9 @@ $("inCam").onchange=e=>onFiles(e.target);$("inVid").onchange=e=>onFiles(e.target
 $("capPhoto").onclick=()=>{pending={mode:"new"};$("inCam").click()};
 $("capVideo").onclick=()=>{pending={mode:"new"};$("inVid").click()};
 $("capLib").onclick=()=>{pending={mode:"new"};$("inLib").click()};
-$("capNote").onclick=()=>{const I=cur(),x=newItem(I,lastType());I.items.push(x);saveInsp(I,true);openEditor(x.id);tagItem(I,x,false);setTimeout(()=>{const n=$("e-notes");if(n)n.focus()},80)};
+function addObservation(from){const I=cur(),x=newItem(I,from?from.type:lastType());if(from){x.location=from.location;x.trade=from.trade}I.items.push(x);saveInsp(I,true);
+ if(editing){editing=x.id;renderEditor();$("sheet").scrollTop=0}else openEditor(x.id);tagItem(I,x,false);setTimeout(()=>{const n=$("e-notes");if(n)n.focus()},80);return x}
+$("capNote").onclick=()=>addObservation();
 
 /* ---------- media viewer ---------- */
 const MEDIA_ROLES=["Before","Progress","After","Reference"];
@@ -994,6 +999,7 @@ $("app").addEventListener("click",async e=>{const b=e.target.closest("button");i
  if(b.dataset.filter){S.filter=b.dataset.filter;render();return}
  if(b.dataset.open){openEditor(b.dataset.open);return}
  if(b.id==="loadSample"){await loadSample();return}
+ if(b.id==="lAdd"){addObservation();return}
  if(b.dataset.exp){const I=cur();if(!I.items.length){toast("Add at least one observation first.");return}
   return b.dataset.exp==="pdf"?exportPdf(I,b):b.dataset.exp==="xlsx"?exportXlsx(I,b):exportZip(I,b)}
  if(b.id==="rSend"){const I=cur();if(!I.items.length){toast("Add at least one observation first.");return}openSend(I);return}
